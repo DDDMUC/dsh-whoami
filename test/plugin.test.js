@@ -1,15 +1,28 @@
 /**
- * Plugin wiring: what the host registers, and what one shell execution receives.
+ * Plugin wiring: what the host registers, what one shell execution receives, and
+ * the promise that a shell call is never failed by this plugin.
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { apply, appLabel, inject, name, readSelection } from '../lib/index.js'
 
-/** A fake host context that captures the registration and runs effects eagerly. */
+/**
+ * A fake host context.
+ *
+ * `inject` mirrors cordis: the callback runs only when every named service is
+ * actually available, and never with an undeclared service.
+ */
 function fakeContext(options = {}) {
   const registered = []
   const ctx = {
-    sessionProjections: options.sessionProjections,
+    inject(names, callback) {
+      assert.deepEqual(names, ['sessionProjections'])
+      const scope = {}
+      if (options.sessionProjections !== undefined) scope.sessionProjections = options.sessionProjections
+      else return () => {}
+      const dispose = callback(scope)
+      return typeof dispose === 'function' ? dispose : () => {}
+    },
     shellEnv: {
       register(contributor) {
         registered.push(contributor)
@@ -23,10 +36,10 @@ function fakeContext(options = {}) {
   return { ctx, registered }
 }
 
-test('the plugin declares the shell environment registry as its one dependency', () => {
+test('the plugin declares only the shell environment registry as required', () => {
   // Given the plugin's cordis declaration
   // When it is inspected
-  // Then the name and the injected registry are the documented ones
+  // Then the optional projection registry is NOT a hard dependency
   assert.equal(name, 'whoami')
   assert.deepEqual(inject, ['shellEnv'])
 })
@@ -83,16 +96,31 @@ test('a shell execution without an agent still publishes the host facts', () => 
   assert.ok(contribution.DSH_DEVICE.length > 0)
 })
 
-test('a projection shape this build cannot read is treated as absent', () => {
-  // Given readers that throw, return null, or return the wire view
+test('a throwing projection reader never fails the shell call', () => {
+  // Given a registry whose reader throws and one whose getter throws
   const session = { id: 's' }
-  const throwing = readSelection({ sessionProjections: { snapshot: () => { throw new Error('shape changed') } } }, session)
-  const empty = readSelection({ sessionProjections: { snapshot: () => ({ values: {} }) } }, session)
-  const view = readSelection({ sessionProjections: { snapshot: () => ({ values: { modelSelection: { lastUsed: null, next: { provider: 'zai', model: 'glm-5.3' } } } }) } }, session)
-  const legacy = readSelection({ sessionProjections: { cachedSnapshot: () => ({ values: { modelSelection: { lastUsed: null, pending: { provider: 'openrouter', model: 'qwen3.8' } } } }) } }, session)
+  const throwing = { snapshot: () => { throw new Error('shape changed') } }
+  const hostile = {}
+  Object.defineProperty(hostile, 'snapshot', { get() { throw new Error('unreadable') } })
+  const { ctx, registered } = fakeContext({ sessionProjections: throwing })
+  // When the contributor resolves, and when a hostile registry is read directly
+  apply(ctx, {})
+  const contribution = registered[0].resolve({ agent: { session } })
+  const direct = readSelection([hostile, throwing], session)
+  // Then the call still returns the host facts, and the unreadable value is absent
+  assert.equal('DSH_MODEL' in contribution, false)
+  assert.ok(contribution.DSH_DEVICE.length > 0)
+  assert.equal(direct, undefined)
+})
+
+test('a projection shape this build cannot read is treated as absent', () => {
+  // Given readers that return nothing useful, the wire view, and the legacy state view
+  const session = { id: 's' }
+  const empty = readSelection([{ snapshot: () => ({ values: {} }) }], session)
+  const view = readSelection([{ snapshot: () => ({ values: { modelSelection: { lastUsed: null, next: { provider: 'zai', model: 'glm-5.3' } } } }) }], session)
+  const legacy = readSelection([{ cachedSnapshot: () => ({ values: { modelSelection: { lastUsed: null, pending: { provider: 'openrouter', model: 'qwen3.8' } } } }) }], session)
   // When each is normalized through the contributor's reader
-  // Then a broken shape is absent, and both declared projection shapes are read
-  assert.equal(throwing, undefined)
+  // Then an empty projection is absent, and both declared shapes are read
   assert.equal(empty, undefined)
   assert.deepEqual(view, { lastUsed: null, next: { provider: 'zai', model: 'glm-5.3' } })
   assert.deepEqual(legacy, { lastUsed: null, pending: { provider: 'openrouter', model: 'qwen3.8' } })
