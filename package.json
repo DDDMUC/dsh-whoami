@@ -1,0 +1,39 @@
+{
+  "name": "dsh-whoami",
+  "version": "0.1.0",
+  "description": "Publish the running agent's identity — device, application, provider, model and reasoning effort — as managed DSH_* environment variables on every model shell call, so an agent can answer \"which device, in which app, served by which model am I?\" without asking anyone.",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib/index.js",
+    "lib/identity.js",
+    "cordis.patch.yml",
+    "README.md",
+    "AGENTS.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "engines": {
+      "dsh": ">=0.2.0-rc.2"
+    },
+    "compatibility": {
+      "dshReleases": {
+        "0.2.0-rc.2": "compatible"
+      }
+    }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "identity",
+    "environment"
+  ],
+  "license": "MIT"
+}

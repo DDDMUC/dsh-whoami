@@ -1,0 +1,16 @@
+# dsh-whoami bundle patch: inserts the plugin row into the profile roster.
+#
+# Host-only plugin: it contributes the runtime-identity variables
+# (DSH_DEVICE / DSH_APP / DSH_PROVIDER / DSH_MODEL / DSH_EFFORT) to the managed
+# shell environment every model-facing shell call receives, and registers no
+# browser half, no route and no tool.
+#
+# The entry name is the BARE package name, matching the rest of the family: the
+# loader resolves the row by Node package resolution from the profile directory.
+#
+# A bundle-row change is a profile composition change, so enabling, disabling or
+# updating this plugin takes effect after the next `dsh web` / host restart —
+# unless the profile sets `patchReload: live`, in which case the row hot-loads.
+- insert:
+    - id: dsh-whoami
+      name: 'dsh-whoami'
